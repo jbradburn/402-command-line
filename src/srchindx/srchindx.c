@@ -1,26 +1,33 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-const static size_t DEFAULT_BUCKET_SIZE = 7;
-const static size_t DEFAULT_TABLE_SIZE = 127;
-size_t TABLE_SIZE;
+#include "srchindx.h"
 
 // Function declarations
-int hashFunction(char *,  int);
+int hashFunction(char*,  int);
 
 typedef struct HashItem {
    char airline[2];
    int count;
    int key;
-   hnode *next;
+   struct hnode *next;
 } hnode;
 
-hnode* hashTable[DEFAULT_TABLE_SIZE];
+size_t TABLE_SIZE;
+hnode** hashTable;
 hnode* delNode;
 hnode* newNode;
 
 int main(int argc, const char* argv[])
-{
+{   
+    TABLE_SIZE = DEFAULT_TABLE_SIZE;
+    hnode** hashTable = malloc( DEFAULT_TABLE_SIZE*sizeof(hnode*) );
+    if ( argc < 2 || argc > 3 ) {
+        printf("Invalid number of arguments: %d", argc);
+        free(hashTable);
+        return 0;
+    }
+    free(hashTable);
     return 0;
 }
 
@@ -41,7 +48,7 @@ void insert(char* key, hnode* data) {
     hnode *newNode = data;
 
     int hash = hashFunction(key, TABLE_SIZE);
-    while ( hashTable[hash]->key 1= NULL && hashTable[hash]->key != -1 ) {
+    while ( hashTable[hash]->key != NULL && hashTable[hash]->key != -1 ) {
             hash += 1;
             hash %= TABLE_SIZE;
     }
@@ -52,7 +59,7 @@ void insert(char* key, hnode* data) {
 hnode *delete(hnode *data) {
     int key = data->key;
 
-    int hash = hashFunction(key);
+    int hash = hashFunction(key, TABLE_SIZE);
     while ( hashTable[hash]->key != NULL ) {
         if ( hashTable[hash]->key == key ) {
             hnode *temp = hashTable[hash];
