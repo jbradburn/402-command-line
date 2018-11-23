@@ -11,7 +11,7 @@ int createFile(char* cname) {
 
     // Construct file name (O(1))
     if (cname != NULL) {
-        printf("\n%s\n", DEFAULT_FILE_LOC);
+        //printf("\n%s\n", DEFAULT_FILE_LOC);
         snprintf(filename, sizeof(filename), "%s%.20s%s", DEFAULT_FILE_LOC, cname, DEFAULT_FEXT);
     }
     else return -1;
