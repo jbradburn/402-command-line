@@ -27,8 +27,8 @@ typedef struct IndexNode {
 } inode;
 
 // Struct print fcts
-int printAnode(struct AirportNode*);
-int printInode(struct IndexNode*);
+int prettyPrintAirport(struct AirportNode*);
+int prettyPrintAirline(struct IndexNode*);
 
 // Function declarations
 anode *addAirport(char*);
@@ -82,9 +82,9 @@ int main() {
     aport_array[0]->children += 1;
      */
     for (int i = 0; i < 5; i++ ) {
-        printAnode(aport_array[i]);
-        //printInode(searchAirline(letters[i], "AA"));
-        //printInode(searchAirline(letters[i], "FF"));
+        prettyPrintAirport(aport_array[i]);
+        //prettyPrintAirline(searchAirline(letters[i], "AA"));
+        //prettyPrintAirline(searchAirline(letters[i], "FF"));
         listAirline(letters[i]);
     }
 
@@ -95,7 +95,7 @@ int main() {
     //aport_array[0]->head = temp;
     //aport_array[0]->children += 1;
 
-    //printAnode(aport_array[0]);
+    //prettyPrintAirport(aport_array[0]);
     
     free(aport_array);
     return 0;
@@ -205,7 +205,7 @@ int listAirline(char* airport) {
     anode* temp = searchAirport(airport);
     inode* itemp = temp->head;
     while (itemp != NULL) {
-        printInode(itemp);
+        prettyPrintAirline(itemp);
         itemp = itemp->next;
     }
     return 1;
@@ -221,7 +221,7 @@ int length(anode** array) {
     return s;
 }
 
-int printAnode(anode* airport) {
+int prettyPrintAirport(anode* airport) {
     if (airport != NULL) {
         printf("\nAirport: %s\nChildren: %d\nHead: %p\n", airport->airport, airport->children, airport->head );
         return 1;
@@ -230,7 +230,7 @@ int printAnode(anode* airport) {
 }
 
 
-int printInode(inode* airline) {
+int prettyPrintAirline(inode* airline) {
     if (airline != NULL) {
         printf("\nAirline: %s\nCount: %d\nThis: %p\nNext: %p\n", airline->name, airline->count, airline, airline->next );
         return 1;
