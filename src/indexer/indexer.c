@@ -1,287 +1,392 @@
+#define _XOPEN_SOURCE 500
+#include <ftw.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 #include <assert.h>
 // Directory libraries
 #include <dirent.h>
-#include <ftw.h>
 
 #include "tokenizer.h"
+#include "../srchindx/srchindx.h"
 
-#define DEFAULT_IDX_LENGTH  50      // Default limit for index length (max number of discrete airports)
-#define DEFAULT_IDX_SIZE    1000    // Default limit for node structs in file
-#define AIRPORT_NAME_LENGTH 3       // Char length of airport codes
-#define AIRLINE_NAME_LENGTH 2
+#define AIRPORT_NAME_SIZE 4
+#define HASH_TABLE_BASE_SIZE 100
+#define DEFAULT_AIRPORT_CAPACITY 128
 
 const char *ROOT_DIR = "../../data";
 
-typedef struct AirportNode {
-    char *airport;  // airport name
-    struct inode *head;   // ptr to first airline for airport
-    int children;
-} anode;
-typedef struct IndexNode {
+typedef struct inode {
     char *name; // airline name
     int count;  // number of flights on airline for head airport
-    struct inode *next;
+    struct inode* next;
 } inode;
 
-// Struct print fcts
-int prettyPrintAirport(struct AirportNode*);
-int prettyPrintAirline(struct IndexNode*);
+typedef struct anode {
+    char *airport;          // airport name
+    struct inode* data;    // airlines for airport
+    size_t capacity;        // max number of elements
+    size_t size;            // num elements
+    int children;           // deprecated
+} anode;
 
-// Function declarations
-anode *addAirport(char*);
-inode *addAirline(char*, char*);
+// Airport lists
+int airport_init(anode*, char*, size_t);
+int airline_init(inode*, char*);
+int airport_resize(anode*, size_t);
+int airline_insert(anode*, inode*);
+inode* airline_search(anode*, char*);
+void prettyPrintAirport(anode*);
+void prettyPrintAirline(inode*);
 
-anode* searchAirport(char*);
-inode* searchAirline(char*,  char*);
+// Hash Table
+int hashFunction(char*, int);
+int initHashTable();
+anode* search(char*);
+int insert(anode*);
+anode* delete(anode*);
+//int prettyPrintHashTable();
 
-int f_name(const char *, const struct stat *, int);
+// Indexer
+int f_name(const char*, const struct stat*, int, struct FTW*);
 void index_dir();
+token_file_wrapper* tokenize(char*);
+int indexTokenData(token_file_wrapper*, const char*);
 
-char*** tokenize(char*);    //
+// HASH TABLE VARS/DEFS
+size_t TABLE_SIZE;
+anode** hashTable;
+anode* delNode;
+anode* newNode;
 
-anode** aport_array;    // Array to store complete index data before writing to file
-inode* empty_item;      // Empty airline node in case of delete function
-char** data_buf[3];     // Array to collect values of 
+char** key_list;
+int key_idx;
 
 int main() {
+    key_list = malloc( sizeof(char*)*HASH_TABLE_BASE_SIZE );
+    key_idx = 0;
+    TABLE_SIZE = HASH_TABLE_BASE_SIZE;
+    initHashTable();
 
-    int index = 0;
+    index_dir();
 
-    // DUMMY DATA - POPULATE LIST
-    char *letters[5] = {"AAA", "BBB", "CCC", "DDD", "EEE"};
-    char *lineletters[5] = {"FF", "GG", "HH", "II", "JJ"};
-
-    // Initialize first airport in table
-    aport_array = malloc( 10*sizeof(aport_array) );
-    for (int i = 0; i < 5; i++ ) {
-        addAirport(letters[i]);
-        addAirline(letters[i], lineletters[i]);
-        /*
-        TEST ARGUMENTS
-        addAirline(letters[i], "AA");
-        addAirline(letters[i], "AA");
-        addAirline(letters[i], "ZZ");
-        addAirline(letters[i], "AA");
-        addAirline(letters[i], lineletters[i]);
-        */
-        
+    anode* printy = malloc(sizeof(anode));
+    for (int x = 0; x < key_idx; x++) {
+        printy = search(key_list[x]);
+        prettyPrintAirport( printy );
+        print_airlines( printy );
     }
 
-    /*
-    // Temp code to add inode
-    inode* temp = malloc( sizeof(inode) );
-    temp->name = malloc( AIRLINE_NAME_LENGTH );
-    temp->name = "AA";
-    temp->count = 0;
-    temp->next = NULL;
-    inode* idx = aport_array[0]->head;
-    idx->next = temp;
-    aport_array[0]->children += 1;
-     */
-    for (int i = 0; i < 5; i++ ) {
-        prettyPrintAirport(aport_array[i]);
-        //prettyPrintAirline(searchAirline(letters[i], "AA"));
-        //prettyPrintAirline(searchAirline(letters[i], "FF"));
-        listAirline(letters[i]);
-    }
-
-
-
-
-    //aport_array[0]->airport = "LAX";
-    //aport_array[0]->head = temp;
-    //aport_array[0]->children += 1;
-
-    //prettyPrintAirport(aport_array[0]);
-    
-    free(aport_array);
+    free(hashTable);
     return 0;
 }
 
-/*
-    Search airports in O(n) 
- */
-anode* searchAirport(char* airport_name) {
-    
-    if ( aport_array ) {
-        size_t idx = 0;
-        anode* temp = malloc( sizeof( anode* ) );
-        temp = aport_array[idx];
-        while ( temp ) {
-            if ( temp->airport == airport_name )
-                return temp;
-            temp = *(aport_array + idx);
-            ++idx;
+
+
+int airport_init(anode* airport, char* name, size_t init_capacity) {
+    //anode* airport = *input;
+    airport->data = (inode*)malloc( sizeof(inode) ); // Allocate mem = sizeof inode * init capacity
+    if( airport->data == NULL) {
+        return -1;  // Failure
+    }
+    airport->airport = malloc( AIRPORT_NAME_SIZE );
+    strcpy(airport->airport, name);
+    strcat(airport->airport, "\0");
+    //airport->airport = name;
+    airport->capacity = init_capacity;
+    airport->size = 0;
+    return 0;       // Success
+}
+int airport_resize(anode* old_memory, size_t new_size) {
+    anode* new_memory = realloc(old_memory, new_size);
+    if(!new_memory) {
+        return -1;
+    }
+    old_memory = new_memory;
+    return 0;
+}
+int airline_init(inode* airline, char* name) {
+    if(!airline) return -1;
+    airline->name = name;
+    airline->count = 0;
+    airline-> next = NULL;
+    return 0;
+}
+int airline_insert(anode* airport, inode* input) {
+    inode* head = airport->data;
+    while(head->next != NULL) {
+        if( strcmp(head->next->name, input->name) == 0 ) {
+            head->next->count += 1;
+            return 0;
         }
+        head = head->next;
+    }
+    head->next = malloc(sizeof(inode));
+    head->next = (inode*)input;
+    head->next->count = 1;
+    airport->size += 1;
+    return 0;
+}
+void print_airlines(anode* airport) {
+    inode* head = airport->data;
+    if(head->next) head = head->next;
+    printf("========\nFlights in %s\n========\n", airport->airport);
+    while(head != NULL) {
+        
+        prettyPrintAirline(head);
+        head = head->next;
+    }
+    printf("========\nEnd\n========\n");
+}
+
+inode* airline_search(anode* airport, char* airline) {
+    if(!airport || !airline){
+        return -1;
+    }
+    inode* head = airport->data;
+    while( head->next != NULL ) {
+        if( strcmp(head->next->name, airline) == 0 ) {
+            return head->next;
+        }
+        head = head->next;
+    }
+    return NULL;
+}
+void prettyPrintAirport(anode* airport) {
+    if(airport) {
+        printf("\nAirport: %s\nCapacity: %ld\nSize: %ld\nHead: %p\n Self: %p\n\n", airport->airport, airport->capacity, airport->size, airport->data, airport);
+    }
+}
+void prettyPrintAirline(inode* airline) {
+    if(airline) {
+        printf("\nAirline: %s\nFlights: %d\nHead: %p\n\n", airline->name, airline->count, airline);
+    }
+}
+/*
+inode* airline_deep_copy(inode* airline) {
+    if(!airline) return NULL;
+    inode* copy_airline = malloc( sizeof(inode) );
+    strcpy(copy_airline->name, airline->name)
+    copy_airline->count = 0;
+}
+*/
+
+/*
+    HASH TABLE
+ ============================================
+ */
+/*
+int hashFunction(char*, int);
+int initHashTable();
+anode* search(char*);
+void insert(char*, anode*);
+anode* delete(anode*);
+ */
+
+/*Hash Function*/
+int hashFunction(char *s,  int T) {
+
+   /* The parameter s represents the symbol to be hashed and  */
+   /* the parameter T represents the size of the hash table.  */
+   /* The function returns the hash value for the symbol s.   */
+
+   /* String s is assumed to be terminated with '\0'.         */
+   /* It is also assumed that T is at least 2. The returned   */
+   /* hash value is an integer in the range 0 to T-1.         */
+
+   /* The function computes the hash value using arithmetic   */
+   /* based on powers of the BASE value defined below.        */
+
+   #define  BASE   127
+
+   int h = 0;     /* Will hold the hash value at the end. */
+   int temp;      /* Temporary.                           */
+
+   /* The hash value is computed in the for loop below. */
+   for (;  *s != 0;  s++) {
+       temp = (BASE * h + *s);
+       if (temp < 0) temp = -temp;
+       h = temp % T;
+   }
+
+   /* The hash value computation is complete. So, */
+   return h;
+
+} /* End of hash function */
+
+int initHashTable() {
+    hashTable = malloc( TABLE_SIZE*sizeof(anode*) );
+    if(!hashTable) 
+        return -1;
+    return 0;
+}
+
+// Enforcing hash table with linear probing
+anode *search(char* key) {
+    int hash = hashFunction(key, TABLE_SIZE);   
+    //printf("Hash Table Search Check 1: entered function\n");
+    while ( hashTable[hash] != NULL ) {
+        //printf("Hash Table Search Check 2: value at hash not NULL\n");
+        if ( strcmp(hashTable[hash]->airport, key) != -1 ) {
+            //printf("Hash Table Search Check 3: match found\n");
+            return hashTable[hash];  // If key matches, then return match
+        }
+        hash += 1;          // Otherwise increment to next available space in table
+        hash %= TABLE_SIZE; // or wrap around table
     }
     return NULL;
 }
 
-inode* searchAirline(char* airport_name,  char* airline_name) {
-    anode* temp;
-    if( temp = searchAirport(airport_name) ) {
-        size_t idx = 0;
-        inode* itemp = malloc( sizeof( inode* ) );
-        itemp = temp->head;
-        while( itemp ) {
-            if ( itemp->name == airline_name ) 
-                return itemp;
-            itemp = itemp->next;
-        }
-    }
-    return NULL;
-}
+// Enforcing linear probing
+int insert(anode* data) {
+    if (!data) return -1;
 
-/*
-    Add an airport in O(n)
- */
-anode *addAirport(char* airport_name) {
-    int idx = length(aport_array);
-    aport_array[ idx ] = malloc( sizeof( anode* ) );    // Allocate memory for next airport node
-
-    aport_array[idx]->airport = malloc( AIRPORT_NAME_LENGTH*sizeof(char) );
-    aport_array[idx]->head = malloc( sizeof( inode ) );
-
-    aport_array[idx]->airport = airport_name;
-
-    return aport_array[idx];
-}
-
-/*
-    Add/incr airline in O(n)
- */
-inode *addAirline(char* airport_name, char* airline_name) {
-    // Allocate memory to local structs
-    anode* airport;// = malloc( sizeof( anode* ) );
-    inode* airline;// = malloc( sizeof( inode* ) );
-    inode* idx = malloc( sizeof( inode* ) );
-
-    if ( airport = searchAirport(airport_name) ) {
-        assert(airport);
-        if ( airline = searchAirline( airport_name, airline_name) ) {
-            incAirline(airline);
-            printf("\nDUPLICATE\n");
-            return airline;
-        }
-        printf("Adding airline: %s\n", airline_name);
-
-        
-        idx = airport;
-        airline = malloc( sizeof( inode* ));
-        airline->name = (char*)malloc( AIRLINE_NAME_LENGTH );  
-        airline->name = airline_name;
-        airline->count = 1;
-        airline->next = NULL;
-        
-        if ( airport->head != NULL ) {
-            idx = airport->head;
-            while ( idx->next != NULL ) {
-                idx = idx->next;
+    // Hash key from input airport
+    char* key = data->airport;
+    int hash = hashFunction(key, TABLE_SIZE);
+    //printf("\n%d\n", hash);
+    if (hashTable[hash] != NULL) {
+        //printf("COLLISION\n");
+        while (hashTable[hash] != NULL) {
+            //printf("%s, %s\n", hashTable[hash]->airport, key);
+            if ( strcmp(hashTable[hash]->airport, key) == 0 ) {
+                //printf(" DUP\n");
+                return 0;
             }
-            idx->next = airline;
+            else {
+                hash += 1;
+                hash %= TABLE_SIZE;
+            }
         }
-        else {
-            airport->head = airline;
-        }
+    }
 
-        //airline->next = malloc( sizeof(airline->next) );
-        return airline;
-    
+    hashTable[hash] = malloc( sizeof(anode) );
+    hashTable[hash] = data;
+    key_list[key_idx] = malloc(sizeof(char)*3);
+    key_list[key_idx] = key;
+    key_idx++;
+    //printf(" ADDED\n");
+    return 0;
+}
+
+// Enforcing linear probing
+anode *delete(anode *data) {
+    int key = data->airport;
+
+    int hash = hashFunction(key, TABLE_SIZE);
+    while ( hashTable[hash]->airport != NULL ) {
+        if ( hashTable[hash]->airport == key ) {
+            anode *temp = hashTable[hash];
+            hashTable[hash] = delNode;
+            return temp;
+        }
+        hash += 1;
+        hash %= TABLE_SIZE;
     }
     return NULL;
 }
 
 /*
-    Increment airport -> airline count
+    TOKENIZER
+    =======================
  */
-int incAirline(inode* airline) {
-    return airline->count += 1;
-}
-
-int listAirline(char* airport) {
-    anode* temp = searchAirport(airport);
-    inode* itemp = temp->head;
-    while (itemp != NULL) {
-        prettyPrintAirline(itemp);
-        itemp = itemp->next;
-    }
-    return 1;
-}
-
-
-/*
-    Get length of anode array;
- */
-int length(anode** array) {
-    int s = 0;
-    while (array[s] != NULL) s++;
-    return s;
-}
-
-int prettyPrintAirport(anode* airport) {
-    if (airport != NULL) {
-        printf("\nAirport: %s\nChildren: %d\nHead: %p\n", airport->airport, airport->children, airport->head );
-        return 1;
-    }
-    return 0;
-}
-
-
-int prettyPrintAirline(inode* airline) {
-    if (airline != NULL) {
-        printf("\nAirline: %s\nCount: %d\nThis: %p\nNext: %p\n", airline->name, airline->count, airline, airline->next );
-        return 1;
-    }
-    return 0;
-}
 
 /*
  * Function to point for ftw
  */
-int f_name(const char *f_name, const struct stat *status, int f_type) {
+
+int f_name(const char *f_name, const struct stat *sb, int f_type, struct FTW *ftw_buf) {
     if( f_type == FTW_NS )
         return 0;
     
-    if( f_type == FTW_F )
-        printf("%-30s\n", f_name);
-    return 0;
-}
+    if( f_type == FTW_F ) {
+        char *base_name = malloc( 7 );
+        char *dupname = malloc( 7 ); 
+        (base_name = strrchr(f_name, '/')) ? ++base_name : (base_name = f_name); // Extract base filename from path
+        dupname = strdup(base_name);
+        char *air_name = malloc ( 3*sizeof(char) );
+        air_name = strtok( dupname, ".");
 
-int create_idx(const char *f_name, const struct stat *status, int f_type) {
-    if( f_type == FTW_NS )
-        return 0;
-    
-    if( f_type == FTW_F )
-        printf("%-30s\n", f_name);
-
+        char*** token_data = (char***)malloc( MAX_SIZE*sizeof(char**) );
+        token_data = tokenize(base_name);
+        indexTokenData(token_data, air_name);
+    }
     return 0;
 }
 
 // Function wrapper for ftw, don't really need this, can just call ftw in main instead.
 void index_dir() {
-
-    ftw(ROOT_DIR, (*f_name), 2);
+    int flags = 0;
+    flags |= FTW_PHYS;
+    nftw(ROOT_DIR, f_name, 20, flags);
+    //prettyPrintIndexData();
 }
 
 /*
  * Wrapper function to initialize and run tokenizer function from tokenizer.c
  */
-char*** tokenize(char* fname) {
+token_file_wrapper* tokenize(char* fname) {
     // TOKENIZE
 
-    char ***DATA;
-	FILE* fp = fopen("../../data/AA.txt", "r");	// Open file as 'fp'
+    token_file_wrapper* DATA; 
+	FILE* fp = fopen(fname, "r");	// Open file as 'fp'
 	assert(fp);	
 	printf("\nFile open success.\n");
-	DATA = (char***)malloc( MAX_SIZE*sizeof(char**) );
+
+	DATA = malloc( MAX_SIZE*sizeof(token_file_wrapper) );
+
+    
 	DATA = tokenizeFile(fp);
     return DATA;
     // END TOKENIZE
 }
 
-void indexTokenData(char*** data) {
+int indexTokenData(token_file_wrapper* data_wrapper, const char* line_name) {
+    if( !data_wrapper ) return -1;
+    int size = data_wrapper->SIZE;
+    
+    //printf("\nSize: %d\n", size);
+    
+    char*** data = malloc( MAX_SIZE*sizeof(char**) );
+    data = data_wrapper->DATA;
+
+    inode* newAirline;
+    anode* newAirport1;
+    anode* newAirport2;
+    for ( int i = 0; i < size; i++ ) {
+        char* airport1 = malloc( 3 );
+        airport1 = data[i][1];
+        char* airport2 = malloc( 3 );
+        airport2 = data[i][2];
+        newAirport1 = malloc( sizeof(anode) );
+        newAirport2 = malloc( sizeof(anode) );
+
+        // Initialize new airports
+        airport_init(newAirport1, airport1, DEFAULT_AIRPORT_CAPACITY);
+        //printf("Insert: %s", airport1);
+        insert(newAirport1);     // Add airport to hash table
+        anode* portsearch1 = malloc(sizeof(anode));
+        portsearch1 = search(airport1);
+
+        airport_init(newAirport2, airport2, DEFAULT_AIRPORT_CAPACITY);
+        //printf("Insert: %s", airport2);
+        insert(newAirport2);     // Add airport to hash table
+        anode* portsearch2 = malloc(sizeof(anode));
+        portsearch2 = search(airport2);
+
+        //printf("\n\n");
+        // Initialize new airline
+        newAirline = (inode*)malloc( sizeof(inode) );
+        airline_init(newAirline, line_name);  
+        airline_insert( portsearch1, newAirline );    // Add airline flight to New Airport Vector 1
+
+        newAirline = (inode*)malloc( sizeof(inode) );
+        airline_init(newAirline, line_name);  
+        airline_insert( portsearch2, newAirline );    // Add airline flight to New Airport Vector 2
+    }
+    printf("File index success\n");
+
     return 0;
 }
+
