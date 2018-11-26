@@ -17,7 +17,8 @@ int main() {
 	free(DATA);
 }
 */
-extern char*** tokenizeFile(FILE* fp) {
+
+extern token_file_wrapper* tokenizeFile(FILE* fp) {
 	char LINE_BUF[BUF_SIZE];	// Line buffer
 	char **FILE_LINES_BUF;		// Buffer to collect all lines in a file
 	char ***DATA;				// Array for sets of 'tokens' (parameters)
@@ -39,7 +40,10 @@ extern char*** tokenizeFile(FILE* fp) {
 	}
 	assert( DATA );
 	printTriArray(DATA, NUM_LINES);
-	return DATA;
+	token_file_wrapper* OUTPUT = malloc( sizeof(token_file_wrapper) );
+	OUTPUT->DATA = DATA;
+	OUTPUT->SIZE = NUM_LINES;
+	return OUTPUT;
 }
 
 /*
