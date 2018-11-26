@@ -309,6 +309,7 @@ int f_name(const char *f_name, const struct stat *sb, int f_type, struct FTW *ft
         air_name = strtok( dupname, ".");
 
         char*** token_data = (char***)malloc( MAX_SIZE*sizeof(char**) );
+        printf("%s\n", base_name);
         token_data = tokenize(base_name);
         indexTokenData(token_data, air_name);
     }
@@ -330,8 +331,8 @@ token_file_wrapper* tokenize(char* fname) {
     // TOKENIZE
 
     token_file_wrapper* DATA; 
-	FILE* fp = fopen(fname, "r");	// Open file as 'fp'
-	assert(fp);	
+	FILE* fp = fopen("fname", "r");	// Open file as 'fp'
+	//assert(fp);	
 	printf("\nFile open success.\n");
 
 	DATA = malloc( MAX_SIZE*sizeof(token_file_wrapper) );
