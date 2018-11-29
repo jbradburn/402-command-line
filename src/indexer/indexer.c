@@ -390,4 +390,3 @@ int indexTokenData(token_file_wrapper* data_wrapper, const char* line_name) {
 
     return 0;
 }
-
