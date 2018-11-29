@@ -36,6 +36,7 @@ int airport_init(anode*, char*, size_t);
 int airline_init(inode*, char*);
 int airport_resize(anode*, size_t);
 int airline_insert(anode*, inode*);
+void print_airlines(anode*);
 inode* airline_search(anode*, char*);
 void prettyPrintAirport(anode*);
 void prettyPrintAirline(inode*);
@@ -175,13 +176,6 @@ inode* airline_deep_copy(inode* airline) {
 /*
     HASH TABLE
  ============================================
- */
-/*
-int hashFunction(char*, int);
-int initHashTable();
-anode* search(char*);
-void insert(char*, anode*);
-anode* delete(anode*);
  */
 
 /*Hash Function*/
