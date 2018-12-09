@@ -59,8 +59,10 @@ char default_path[2] = "./";
 
 int main(int argc, char *argv[]) {
 
-    char* src_fname;    
-    char* src_dirname;
+    char* src_fname = malloc(sizeof(argv[1]));    
+    char* src_dirname = malloc(sizeof(argv[2]));
+    //strcpy(src_fname, argv[1]);
+    //strcpy(src_fname, argv[2]);
 
     // File and directory pointers for reading source to destination files
     FILE* src_fptr;     // Source file
@@ -116,11 +118,13 @@ int main(int argc, char *argv[]) {
 
     // Allocate memory to line buffer
     line_buffer = malloc( MAX_LINE_SIZE * sizeof(char) );
-    
-    FILE* test = fopen("./output/newfile.txt", "w");
-    fclose(test);
+
     printf("Init 1 Passed\n");
-    for ( int i = 0; i < src_file_size; i+=8 ) {
+
+    char *src, *dst, *str;
+    str = malloc( 1 );
+    int i;
+    for ( i = 0; i < src_file_size; i+=8 ) {
         temp = 0;
         // Attempt to read 8 chars (expected (0|1){8}) and check if less than 8 bits are read
         bin_chars_read = fread(bin_char_buffer, sizeof(char), sizeof bin_char_buffer, src_fptr);
@@ -133,6 +137,10 @@ int main(int argc, char *argv[]) {
         for ( int bit_cursor = 0; bit_cursor < 8; ++bit_cursor) {
             temp |= (bin_char_buffer[bit_cursor] & 1) << (7 - bit_cursor);
         }
+        str[i/8] = temp;
+        str = realloc(str, (i/8)+1 );
+
+        /*
         //line_buffer[line_buffer_cursor++] = temp; // Write char to line buffer, incr line buffer
         printf("Converted to char, %c\n", temp);
         // Check flag to separate airline code and index
@@ -149,15 +157,15 @@ int main(int argc, char *argv[]) {
             FLAG_END_OF_AIRLINE_CODE = 1;
         }
         // If current char is "\r" == carriage return, then we are at end of line
-        else if( temp == 13 ) {
-            //fgetc(src_fptr);            // Move cursor past next char (expected '\r' carriage return), 
+        else if (temp == 12) {
+            fgetc(src_fptr);            // Move cursor past next char (expected '\r' carriage return), 
             printf("Is r\n");
-            fseek(src_fptr, 8, SEEK_CUR);
+            //fseek(src_fptr, 8, SEEK_CUR);
             
             printf("Line: %s\n", line_buffer);
-            char lf = 13;       // Add carriage return (13 == \r)
+            //char lf = 13;       // Add carriage return (13 == \r)
             fwrite(line_buffer, line_cursor, sizeof(char), dest_fptr);  // Write line buffer to destination file
-            fwrite(&lf, 1, sizeof(char), dest_fptr);
+            //fwrite(&lf, 1, sizeof(char), dest_fptr);
             fclose(dest_fptr);                                                  // Close destination file
             
             // free line buffer and allocate new memory, prevent mem leak
@@ -191,6 +199,56 @@ int main(int argc, char *argv[]) {
             return 0;
         }
     }
+    */
+    }
+    str[ (i/8) + 1] = 0;
+    int count = 0;
+    while ( str[count] != NULL) count++;
+    for (src = dst = str; *src != '\0'; src++) {
+        *dst = *src;
+        if (*dst != '\r') dst++;
+    }
+    *dst = '\0';
+    int count2 = 0;
+    while ( str[count2] != NULL) count2++;
+    printf("\nResult:\n%s\nOld Size: %d\nNew Size: %d\n\n", str, count, count2);
+
+    char* buf;
+    int time_track = 0;
+    for ( int j = 0; j < count2; j++) {
+        
+
+        if ( isdigit(str[j]) && FLAG_END_OF_AIRLINE_CODE == 0 ) {
+            if ( line_buffer == NULL) {
+                printf("Invalid data format\n");
+                return 0;
+            }
+            file_dest_name = malloc( (sizeof(line_buffer)+4)*sizeof(char) );
+            file_dest_name = add_airline_to_index(&line_buffer, &src_dirname);  // TODO: src_dirname must be created
+            printf("Airline: %s Directory: %s\n", line_buffer, src_dirname);
+            if ( dest_fptr = fopen(file_dest_name, "a") ) {
+                //fseek(dest_fptr, 0, SEEK_END);
+                // TODO: Handle filename not opening
+                // Implement Create here? Maybe not necessary?
+            }
+            FLAG_END_OF_AIRLINE_CODE = 1;
+            line_buffer[line_buffer_cursor++] = str[j];
+        }
+        else if ( str[j] == 10) {
+            line_buffer[line_buffer_cursor++] = str[j];
+            fwrite(line_buffer, line_buffer_cursor, sizeof(char), dest_fptr);  // Write line buffer to destination file
+            line_buffer_cursor = 0;
+            line_buffer = NULL;
+            line_buffer = malloc( MAX_LINE_SIZE * sizeof(char) );
+            FLAG_END_OF_AIRLINE_CODE = 0;
+        } 
+        else {
+            line_buffer[line_buffer_cursor++] = str[j];
+        }
+        printf("%s\n", line_buffer);
+    }
+    line_buffer[line_buffer_cursor++] = 10;
+    fwrite(line_buffer, line_buffer_cursor, sizeof(char), dest_fptr);  // Write line buffer to destination file
 }
 
 /*  increase_fb_size
