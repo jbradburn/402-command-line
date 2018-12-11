@@ -29,14 +29,14 @@ extern token_file_wrapper* tokenizeFile(FILE* fp) {
 	int i = 0;														// (i)ndex for reading file
 	while ( fgets(LINE_BUF, BUF_SIZE, fp ) != NULL ) {					// Get one line from file pointer
 		FILE_LINES_BUF[i] = (char*)malloc( strlen(LINE_BUF) + 1 );		// Allocate strlen(LINE_BUF) + 1 bytes to FILE_LINES_BUF[i]
-		DATA[i] = (char**)malloc( TOKEN_SIZE*sizeof(char*) );			// Allocate 5 char pointers to DATA[i]
+		//DATA[i] = (char**)malloc( TOKEN_SIZE*sizeof(char*) );			// Allocate 5 char pointers to DATA[i]
 		FILE_LINES_BUF[i] = strdup( LINE_BUF );							// Copy first line from LINE_BUF to FILE_LINES_BUF[i]
 		i = i + 1;														// Increment i
 	}
 	//free(LINE_BUF);
 	int NUM_LINES =	i; 											// i == number of lines, i => NUM_LINES
 	for (int j = 0; j < NUM_LINES; j++) {						// For each line in LineS Buffer
-		DATA[j] = stringTokenize(FILE_LINES_BUF[j], DELIM);		// Tokenize each string in FILE_LINES_BUF[] and place in DATA[]
+		DATA[j] = stringTokenize(FILE_LINES_BUF[j]);		// Tokenize each string in FILE_LINES_BUF[] and place in DATA[]
 	}
 	assert( DATA );
 	printTriArray(DATA, NUM_LINES);
@@ -49,28 +49,26 @@ extern token_file_wrapper* tokenizeFile(FILE* fp) {
 /*
  * Tokenize input string into char** by separator s_delim
  */
-char** stringTokenize(char* str, const char s_delim) {
-	//int count = PARAM_NUM;
-	char s_str[2];	// char* for delimiter
-	s_str[0] = ' ';	// delimiter character
-	s_str[1] = 0;	// null terminator
+char** stringTokenize(char* str) {
+    const char s[2] = " ";  // Set delim
+    char *token;            // Char* to hold tokens
 
-	// Tokenize strings
-    char **result = malloc( PARAM_NUM * sizeof( char* ) );	// Allocate char* to array, N == number of elements in line
-    if (result) {
-    	size_t idx = 0;						// Index to track ptr offset 
-    	char *token = strtok(str, s_str);	// Store first token 
+    token = strtok(str, s); // Init first token into string
+    
+    char** result = malloc( sizeof(char*) );    // Allocate n_param strings to result
+    int idx = 0;                                        // Init index to 0
 
-    	while (token) {							// While token (from strtok) still has data (hasn't reached end of line)
-    		assert( idx < PARAM_NUM );			// Check Nth token isn't greater than (N)umber of elements we want to read
-    		*(result + idx++) = strdup(token);	// Increment char* ptr and duplicate last token into char** result at offset idx (idx = number of char*)
-    		token = strtok(0, s_str);			// Store next token
-    	}
-    	assert( idx == PARAM_NUM );					// Check index is exactly the number of parameters we expect
-    	*( result + idx ) = 0;						// Set null terminator at end of char**
-    	result[4][strlen( (char*) result )-1] = 0;	// Set last line break to '\0'
+    while( token != NULL ) {            // While more tokens are in source string
+        printf( " %s\n", token );       // Print token
+        result[idx] = malloc(sizeof(token));
+        strcpy(result[idx++], token);
+        token = strtok(NULL, s);        // Get next token
+    
+        result = realloc(result, sizeof(char*) * (idx+1) );
     }
-    return result;
+
+    free(token);    // Free token
+    return result;  // Return result
 }
 
 /*

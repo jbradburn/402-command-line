@@ -19,7 +19,7 @@ const static size_t MAX_SIZE = 100;	// Max number of lines in file
 
 // Function def
 token_file_wrapper* tokenizeFile(FILE* fp);
-char** stringTokenize(char*, const char);
+char** stringTokenize(char*);
 void printTriArray(char***, int);
 
 
